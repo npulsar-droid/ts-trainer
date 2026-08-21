@@ -1,0 +1,1084 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TS Trainer — 書いて覚えるTypeScript</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --panel: #171a23;
+    --panel2: #1e222e;
+    --border: #2a2f3e;
+    --text: #d7dae3;
+    --dim: #8a90a3;
+    --accent: #4d9fec;
+    --green: #4ade80;
+    --red: #f87171;
+    --yellow: #fbbf24;
+    --mono: "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    height: 100vh; display: flex; overflow: hidden;
+  }
+
+  /* ---- sidebar ---- */
+  #sidebar {
+    width: 260px; min-width: 260px; background: var(--panel);
+    border-right: 1px solid var(--border); overflow-y: auto; padding: 16px 0;
+  }
+  #sidebar h1 { font-size: 16px; padding: 0 16px 4px; color: var(--accent); }
+  #sidebar .sub { font-size: 11px; color: var(--dim); padding: 0 16px 12px; }
+  #progressbar { height: 6px; background: var(--panel2); border-radius: 3px; margin: 0 16px 16px; overflow: hidden; }
+  #progressbar > div { height: 100%; background: var(--green); width: 0%; transition: width .3s; }
+  .chapter { font-size: 12px; color: var(--dim); padding: 12px 16px 4px; font-weight: 600; }
+  .lesson {
+    padding: 7px 16px 7px 28px; font-size: 13px; cursor: pointer;
+    display: flex; align-items: center; gap: 8px; border-left: 3px solid transparent;
+  }
+  .lesson:hover { background: var(--panel2); }
+  .lesson.active { background: var(--panel2); border-left-color: var(--accent); }
+  .lesson .mark { width: 16px; text-align: center; color: var(--dim); }
+  .lesson.done .mark { color: var(--green); }
+  .lesson.review .mark { color: var(--yellow); }
+
+  /* ---- main ---- */
+  #main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  #desc {
+    padding: 20px 24px; overflow-y: auto; max-height: 38%;
+    border-bottom: 1px solid var(--border); background: var(--panel);
+  }
+  #desc h2 { font-size: 18px; margin-bottom: 8px; }
+  #desc p { font-size: 14px; line-height: 1.7; margin-bottom: 8px; color: var(--text); }
+  #desc a { color: var(--accent); }
+  #desc code, #output code {
+    font-family: var(--mono); font-size: 12.5px; background: var(--panel2);
+    padding: 1px 5px; border-radius: 4px; color: var(--yellow);
+  }
+  #desc pre {
+    background: var(--panel2); padding: 10px 12px; border-radius: 6px;
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.5;
+    margin: 8px 0; overflow-x: auto; color: var(--text);
+  }
+  .task { border-left: 3px solid var(--accent); padding-left: 10px; margin-top: 10px; }
+  .resbox {
+    margin-top: 12px; padding: 8px 12px; background: var(--panel2);
+    border-radius: 6px; font-size: 12.5px; color: var(--dim); line-height: 1.7;
+  }
+
+  #editorwrap { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  #toolbar {
+    display: flex; gap: 8px; padding: 8px 24px; align-items: center;
+    background: var(--panel); border-bottom: 1px solid var(--border);
+  }
+  button {
+    background: var(--panel2); color: var(--text); border: 1px solid var(--border);
+    padding: 6px 14px; border-radius: 6px; font-size: 13px; cursor: pointer;
+    font-family: inherit;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: #0b0d12; border: none; font-weight: 600; }
+  button.primary:hover { opacity: .9; }
+  #toolbar .spacer { flex: 1; }
+  #toolbar .kbd { font-size: 11px; color: var(--dim); }
+
+  #editor {
+    flex: 1; width: 100%; background: var(--bg); color: var(--text); border: none;
+    resize: none; outline: none; padding: 14px 24px;
+    font-family: var(--mono); font-size: 14px; line-height: 1.6; tab-size: 2;
+  }
+
+  #output {
+    height: 32%; min-height: 140px; overflow-y: auto; background: var(--panel);
+    border-top: 1px solid var(--border); padding: 12px 24px; font-size: 13px;
+  }
+  #output .test { font-family: var(--mono); font-size: 12.5px; padding: 3px 0; }
+  #output .pass { color: var(--green); }
+  #output .fail { color: var(--red); }
+  #output .err { color: var(--red); font-family: var(--mono); font-size: 12.5px; white-space: pre-wrap; }
+  #output .log { color: var(--dim); font-family: var(--mono); font-size: 12.5px; }
+  #output .celebrate { color: var(--green); font-weight: 600; margin-top: 8px; }
+  #output .review-note { color: var(--yellow); font-weight: 600; margin-top: 8px; }
+  #output .muted { color: var(--dim); }
+  .hintbox {
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 6px;
+    padding: 10px 12px; margin-top: 10px; font-size: 13px; line-height: 1.7;
+  }
+  .hintbox pre { background: var(--bg); padding: 8px 10px; border-radius: 4px; font-family: var(--mono); font-size: 12.5px; margin-top: 6px; overflow-x: auto; }
+</style>
+</head>
+<body>
+
+<nav id="sidebar">
+  <h1>TS Trainer</h1>
+  <div class="sub">書いて覚えるTypeScript全20問</div>
+  <div id="progressbar"><div></div></div>
+  <div id="nav"></div>
+</nav>
+
+<div id="main">
+  <div id="desc"></div>
+  <div id="editorwrap">
+    <div id="toolbar">
+      <button class="primary" id="btn-run">▶ 実行して採点</button>
+      <button id="btn-hint">ヒント</button>
+      <button id="btn-solution">解答例</button>
+      <button id="btn-reset">リセット</button>
+      <span class="spacer"></span>
+      <span class="kbd">⌘+Enter / Ctrl+Enter で実行</span>
+    </div>
+    <textarea id="editor" spellcheck="false"></textarea>
+  </div>
+  <div id="output"><span class="muted">型注釈を書いて「実行して採点」を押してください。</span></div>
+</div>
+
+<script id="engine">
+"use strict";
+
+/* ============ テストヘルパー ============ */
+function fmt(v) {
+  if (typeof v === "string") return JSON.stringify(v);
+  if (typeof v === "function") return "[function]";
+  try { return JSON.stringify(v) ?? String(v); } catch { return String(v); }
+}
+function deepEq(a, b) {
+  if (Object.is(a, b)) return true;
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const ka = Object.keys(a), kb = Object.keys(b);
+  if (ka.length !== kb.length) return false;
+  return ka.every(k => deepEq(a[k], b[k]));
+}
+function eq(name, got, want) {
+  return deepEq(got, want)
+    ? { pass: true, name }
+    : { pass: false, name, detail: `期待値 ${fmt(want)} / 実際 ${fmt(got)}` };
+}
+function check(name, cond, detail) {
+  return cond ? { pass: true, name } : { pass: false, name, detail };
+}
+function T(name, run) { return { name, run }; }
+// TC: 型注釈のソースチェック。not=true なら「書かれていないこと」を確認
+function TC(name, re, detail, not) { return { name, re, detail, not: !!not }; }
+
+/* ============ 型ストリッパー ============
+   採点用に、TSの型注釈だけを取り除いてJSとして実行できる形にする。
+   このドリルで扱う構文（注釈・interface・type・ジェネリクス・as）に絞った軽量版。 */
+
+function skipStringRaw(s, i) {
+  const q = s[i]; i++;
+  while (i < s.length) {
+    if (s[i] === "\\") { i += 2; continue; }
+    if (s[i] === q) return i + 1;
+    if (q === "`" && s[i] === "$" && s[i + 1] === "{") {
+      let d = 1; i += 2;
+      while (i < s.length && d > 0) {
+        if (s[i] === "\\") i++;
+        else if (s[i] === "{") d++;
+        else if (s[i] === "}") d--;
+        i++;
+      }
+      continue;
+    }
+    i++;
+  }
+  return i;
+}
+function skipComment(s, i) {
+  if (s[i + 1] === "/") { while (i < s.length && s[i] !== "\n") i++; return i; }
+  i += 2;
+  while (i < s.length && !(s[i] === "*" && s[i + 1] === "/")) i++;
+  return Math.min(i + 2, s.length);
+}
+
+// `:` の直後から型表現を読み飛ばし、型の終わった位置を返す
+function skipType(s, start) {
+  const n = s.length;
+  let i = start;
+  let last = start;
+  function balanced(open, close) {
+    let d = 0;
+    while (i < n) {
+      const c = s[i];
+      if (c === '"' || c === "'" || c === "`") { i = skipStringRaw(s, i); continue; }
+      if (c === open) d++;
+      else if (c === close) { d--; if (d === 0) { i++; return; } }
+      i++;
+    }
+  }
+  function term() {
+    let j = i;
+    while (j < n && /\s/.test(s[j])) j++;
+    if (j >= n) return false;
+    const c = s[j];
+    if (c === '"' || c === "'") { i = skipStringRaw(s, j); }
+    else if (c === "{") { i = j; balanced("{", "}"); }
+    else if (c === "(") {
+      i = j; balanced("(", ")");
+      let k = i;
+      while (k < n && /\s/.test(s[k])) k++;
+      if (s[k] === "=" && s[k + 1] === ">") { i = k + 2; if (!term()) return false; }
+    }
+    else if (/[\w$]/.test(c)) {
+      i = j;
+      while (i < n && /[\w$.]/.test(s[i])) i++;
+      let k = i;
+      while (k < n && /\s/.test(s[k])) k++;
+      if (s[k] === "<") { i = k; balanced("<", ">"); }
+    }
+    else if (/\d/.test(c) || (c === "-" && /\d/.test(s[j + 1] || ""))) {
+      i = j + 1;
+      while (i < n && /[\d.]/.test(s[i])) i++;
+    }
+    else return false;
+    // 配列サフィックス number[] / T[][]
+    while (true) {
+      let k = i;
+      while (k < n && /\s/.test(s[k])) k++;
+      if (s[k] === "[" && s[k + 1] === "]") { i = k + 2; } else break;
+    }
+    last = i;
+    return true;
+  }
+  if (!term()) return last;
+  while (true) {
+    let k = i;
+    while (k < n && /\s/.test(s[k])) k++;
+    if (s[k] === "|" || s[k] === "&") { i = k + 1; if (!term()) break; }
+    else break;
+  }
+  return last;
+}
+
+// 注釈（: 型 / 引数の ?）を文脈判定しながら除去する
+function stripAnnotations(src) {
+  const n = src.length;
+  let out = "";
+  let i = 0;
+  const stack = [];   // "paren" | "block" | "object" | "bracket"
+  const tern = [0];   // 深さごとの三項演算子カウント
+  const isId = c => /[\w$]/.test(c);
+  const ctx = () => stack.length ? stack[stack.length - 1] : "top";
+
+  function prevInfo() {
+    let j = out.length - 1;
+    while (j >= 0 && /\s/.test(out[j])) j--;
+    return { ch: j >= 0 ? out[j] : "", idx: j };
+  }
+  function wordEndingAt(idx) {
+    let j = idx;
+    while (j >= 0 && isId(out[j])) j--;
+    return out.slice(j + 1, idx + 1);
+  }
+  function wordBeforeWord(idx) {
+    let j = idx;
+    while (j >= 0 && isId(out[j])) j--;
+    while (j >= 0 && /\s/.test(out[j])) j--;
+    const end = j;
+    while (j >= 0 && isId(out[j])) j--;
+    return out.slice(j + 1, end + 1);
+  }
+
+  while (i < n) {
+    const c = src[i];
+    if (c === '"' || c === "'" || c === "`") { const j = skipStringRaw(src, i); out += src.slice(i, j); i = j; continue; }
+    if (c === "/" && (src[i + 1] === "/" || src[i + 1] === "*")) { const j = skipComment(src, i); out += src.slice(i, j); i = j; continue; }
+
+    if (c === "(") { stack.push("paren"); tern.push(0); out += c; i++; continue; }
+    if (c === "[") { stack.push("bracket"); tern.push(0); out += c; i++; continue; }
+    if (c === "{") {
+      const p = prevInfo();
+      let kind = "block";
+      if (["=", "(", ",", "[", ":", "?", "|", "&"].includes(p.ch)) kind = "object";
+      else if (isId(p.ch)) {
+        const w = wordEndingAt(p.idx);
+        if (["return", "typeof", "in", "of", "new", "case"].includes(w)) kind = "object";
+      }
+      if (p.ch === ">" && p.idx > 0 && out[p.idx - 1] === "=") kind = "block"; // => { はアロー本体
+      stack.push(kind); tern.push(0);
+      out += c; i++; continue;
+    }
+    if (c === ")" || c === "]" || c === "}") {
+      if (stack.length) { stack.pop(); tern.pop(); }
+      out += c; i++; continue;
+    }
+
+    if (c === "?") {
+      if (src[i + 1] === ".") { out += "?."; i += 2; continue; }
+      if (src[i + 1] === "?") { out += "??"; i += 2; continue; }
+      let k = i + 1;
+      while (k < n && /\s/.test(src[k])) k++;
+      const p = prevInfo();
+      if (ctx() === "paren" && isId(p.ch) && (src[k] === ":" || src[k] === "," || src[k] === ")")) {
+        i++; continue; // オプショナル引数の ? を除去
+      }
+      tern[tern.length - 1]++;
+      out += c; i++; continue;
+    }
+
+    if (c === ":") {
+      if (tern[tern.length - 1] > 0) { tern[tern.length - 1]--; out += c; i++; continue; }
+      const cx = ctx();
+      if (cx === "object" || cx === "bracket") { out += c; i++; continue; }
+      const p = prevInfo();
+      let ann = false;
+      if (p.ch === ")") ann = true; // 戻り値の型
+      else if ((p.ch === "}" || p.ch === "]") && cx === "paren") ann = true; // 分割代入引数の注釈
+      else if (isId(p.ch)) {
+        const w = wordEndingAt(p.idx);
+        if (cx === "paren") ann = w !== "case";
+        else if (w !== "default") {
+          const before = wordBeforeWord(p.idx);
+          if (["const", "let", "var"].includes(before)) ann = true; // 変数宣言の注釈
+        }
+      }
+      if (ann) { i = skipType(src, i + 1); continue; }
+      out += c; i++; continue;
+    }
+
+    out += c; i++;
+  }
+  return out;
+}
+
+function stripTypes(src) {
+  let s = src;
+  // interface ブロック（ネスト1段まで）
+  s = s.replace(/(^|[\n;])[ \t]*(export\s+)?interface\s+[\w$]+(\s+extends\s+[\w$.,<>\s]+?)?\s*\{[^{}]*(\{[^{}]*\}[^{}]*)*\}/g, "$1");
+  // type エイリアス
+  s = s.replace(/(^|[\n;])[ \t]*(export\s+)?type\s+[\w$]+(\s*<[^<>]*>)?\s*=\s*(\{[^{}]*\}|[^;{}\n])*;?/g, "$1");
+  // as キャスト
+  s = s.replace(/\s+as\s+const\b/g, "");
+  s = s.replace(/\s+as\s+[\w$.]+(\s*<[^<>]*>)?(\s*\[\s*\])*/g, "");
+  // function 宣言のジェネリクスパラメータ
+  s = s.replace(/\b(function\s+[\w$]+)\s*<[^<>]*>/g, "$1");
+  return stripAnnotations(s);
+}
+
+/* ============ 実行エンジン ============ */
+function withTimeout(p, ms) {
+  return Promise.race([
+    Promise.resolve(p),
+    new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), ms)),
+  ]);
+}
+
+async function runCode(lesson, code) {
+  const results = [];
+  // 1) 型注釈のチェック（ソースに対する軽量チェック）
+  for (const tc of lesson.typeChecks ?? []) {
+    const found = tc.re.test(code);
+    const ok = tc.not ? !found : found;
+    results.push(ok
+      ? { pass: true, name: "[型] " + tc.name }
+      : { pass: false, name: "[型] " + tc.name, detail: tc.detail });
+  }
+  // 2) 型を取り除いてJSとして実行
+  const logs = [];
+  const fakeConsole = {
+    log: (...a) => logs.push(a.map(v => typeof v === "string" ? v : fmt(v)).join(" ")),
+    warn: (...a) => logs.push("[warn] " + a.map(String).join(" ")),
+    error: (...a) => logs.push("[error] " + a.map(String).join(" ")),
+  };
+  let stripped;
+  try { stripped = stripTypes(code); }
+  catch (e) { return { error: "型注釈の解析に失敗しました: " + e.message, results, logs }; }
+
+  const names = Array.isArray(lesson.expose) ? lesson.expose : [lesson.expose];
+  let val;
+  try {
+    const retExpr = "{" + names.map(nm => `${nm}: (typeof ${nm} === "undefined" ? undefined : ${nm})`).join(",") + "}";
+    const factory = new Function("console", `"use strict";\n${stripped}\n;return ${retExpr};`);
+    const bag = factory(fakeConsole);
+    val = Array.isArray(lesson.expose) ? bag : bag[lesson.expose];
+  } catch (e) {
+    return { error: `${e.name}: ${e.message}`, results, logs };
+  }
+  if (!Array.isArray(lesson.expose)) {
+    if (lesson.kind === "value") {
+      if (val === undefined) return { error: `変数 ${lesson.expose} が定義されていません（名前を確認してください）`, results, logs };
+    } else if (typeof val !== "function") {
+      return { error: `関数 ${lesson.expose} が定義されていません（名前を確認してください）`, results, logs };
+    }
+  }
+  for (const t of lesson.tests ?? []) {
+    try {
+      results.push(await withTimeout(t.run(val, { logs }), 3000));
+    } catch (e) {
+      results.push({ pass: false, name: t.name, detail: e.message === "timeout" ? "3秒以内に完了しませんでした" : `例外: ${e.message}` });
+    }
+  }
+  return { results, logs };
+}
+
+/* ============ カリキュラム ============ */
+const CHAPTERS = [
+{
+  title: "第1章 基本の型",
+  resources: [
+    { label: "Handbook: Everyday Types", url: "https://www.typescriptlang.org/docs/handbook/2/everyday-types.html" },
+  ],
+  lessons: [
+  {
+    id: "annotate", expose: ["title", "bpm", "isPlaying"], title: "型注釈の基本",
+    desc: `<h2>1-1. 型注釈 — 変数に型を書く</h2>
+<p>TypeScriptはJavaScriptに<b>型の宣言</b>を足した言語です。変数名の直後に <code>: 型</code> と書くのが<b>型注釈</b>。合わない値を入れようとすると、実行前（コンパイル時）にエラーで教えてくれます。</p>
+<pre>let bpm: number = 128;
+bpm = "fast"; // ← コンパイルエラー: string は number に入れられない</pre>
+<p>基本の型は <code>string</code>・<code>number</code>・<code>boolean</code> の3つ。JSの <code>typeof</code> が返す名前と同じです。</p>
+<p class="task"><b>課題:</b> 下の3つの変数に、それぞれ適切な型注釈を追加してください。</p>`,
+    starter: `const title = "Night Drive";\nconst bpm = 128;\nconst isPlaying = false;\n`,
+    hint: `変数名の直後に : 型 を書きます。例: const title: string = "Night Drive";`,
+    solution: `const title: string = "Night Drive";\nconst bpm: number = 128;\nconst isPlaying: boolean = false;`,
+    typeChecks: [
+      TC("title に string の注釈", /(?:const|let)\s+title\s*:\s*string\b/, "const title: string = ... の形にします"),
+      TC("bpm に number の注釈", /(?:const|let)\s+bpm\s*:\s*number\b/, "const bpm: number = ... の形にします"),
+      TC("isPlaying に boolean の注釈", /(?:const|let)\s+isPlaying\s*:\s*boolean\b/, "const isPlaying: boolean = ... の形にします"),
+    ],
+    tests: [
+      T("title は文字列", v => check("title は文字列", typeof v.title === "string", `実際の型: ${typeof v.title}`)),
+      T("bpm は数値", v => check("bpm は数値", typeof v.bpm === "number", `実際の型: ${typeof v.bpm}`)),
+      T("isPlaying は真偽値", v => check("isPlaying は真偽値", typeof v.isPlaying === "boolean", `実際の型: ${typeof v.isPlaying}`)),
+    ],
+  },
+  {
+    id: "totalDuration", expose: "totalDuration", title: "配列の型",
+    desc: `<h2>1-2. 配列の型</h2>
+<p>「数値の配列」は <code>number[]</code> と書きます（<code>Array&lt;number&gt;</code> でも同じ意味）。関数の引数に付けると「この関数には数値の配列しか渡せない」とコンパイラが守ってくれます。</p>
+<pre>const durations: number[] = [30, 90, 120];
+const names: string[] = ["kick", "snare"];</pre>
+<p class="task"><b>課題:</b> 関数 <code>totalDuration(durations: number[]): number</code> を完成させてください。曲の秒数の配列を受け取り、合計を返します（中身はJSでおなじみの <code>reduce</code>）。引数と戻り値の両方に型注釈を書くこと。</p>`,
+    starter: `function totalDuration(durations) {\n  // 型注釈を足して、合計を返す\n}\n`,
+    hint: `引数は durations: number[]、戻り値は ): number {。合計は durations.reduce((sum, n) => sum + n, 0) です。`,
+    solution: `function totalDuration(durations: number[]): number {\n  return durations.reduce((sum, n) => sum + n, 0);\n}`,
+    typeChecks: [
+      TC("durations に number[] の注釈", /durations\s*:\s*(?:number\s*\[\s*\]|Array\s*<\s*number\s*>)/, "durations: number[] と書きます"),
+      TC("戻り値に number の注釈", /\)\s*:\s*number\b/, "閉じ括弧の後に ): number { と書きます"),
+    ],
+    tests: [
+      T("totalDuration([30, 90, 120])", f => eq("totalDuration([30, 90, 120])", f([30, 90, 120]), 240)),
+      T("totalDuration([])", f => eq("totalDuration([])", f([]), 0)),
+    ],
+  },
+  {
+    id: "mode", expose: "mode", kind: "value", title: "リテラル型",
+    desc: `<h2>1-3. リテラル型 — 値そのものが型になる</h2>
+<p>TypeScriptでは <code>"major"</code> のような<b>値そのもの</b>も型として使えます。<code>|</code> で並べると「この値だけを許す」型が作れて、タイプミスをコンパイル時に弾けます（<code>|</code> の詳細は第4章で）。</p>
+<pre>let scale: "major" | "minor" = "major";
+scale = "minor";  // OK
+scale = "majro";  // ← コンパイルエラー！タイプミスが即バレする</pre>
+<p class="task"><b>課題:</b> 変数 <code>mode</code> を <code>"major" | "minor"</code> 型で宣言し、初期値を <code>"major"</code> にしてください。</p>`,
+    starter: `// let mode: ここに型 = "major";\n`,
+    hint: `let mode: "major" | "minor" = "major"; のように、文字列リテラルを | でつなぎます。`,
+    solution: `let mode: "major" | "minor" = "major";`,
+    typeChecks: [
+      TC(`mode に "major" | "minor" の注釈`, /mode\s*:\s*['"](?:major|minor)['"]\s*\|\s*['"](?:major|minor)['"]/, `mode: "major" | "minor" と書きます`),
+    ],
+    tests: [
+      T(`初期値が "major"`, v => eq(`初期値が "major"`, v, "major")),
+    ],
+  },
+  {
+    id: "describeValue", expose: "describeValue", title: "any と unknown",
+    desc: `<h2>1-4. any と unknown</h2>
+<p><code>any</code> は「型チェックを放棄する」型。何でも入り、何をしてもエラーになりません。<b>TSを使う意味が消えるので、原則使いません。</b></p>
+<p><code>unknown</code> は安全な代替です。「何でも入るが、<b>typeof などで確認するまで使えない</b>」型。外から来る正体不明の値の受け皿はこちらを使います。</p>
+<pre>function f(value: unknown) {
+  value.toFixed(1);                 // ← エラー: まだ正体不明
+  if (typeof value === "number") {
+    value.toFixed(1);               // OK: number と確認済み
+  }
+}</pre>
+<p class="task"><b>課題:</b> 関数 <code>describeValue(value: unknown): string</code> を作ってください。値が数値なら <code>数値: 42</code> のような文字列、それ以外は <code>"その他"</code> を返します。<code>any</code> は使わないこと。</p>`,
+    starter: `function describeValue(value) {\n  // 型注釈を足して、typeof で確認してから使う\n}\n`,
+    hint: `value: unknown と注釈し、if (typeof value === "number") return \`数値: \${value}\`; と分岐します。`,
+    solution: `function describeValue(value: unknown): string {\n  if (typeof value === "number") {\n    return \`数値: \${value}\`;\n  }\n  return "その他";\n}`,
+    typeChecks: [
+      TC("value に unknown の注釈", /value\s*:\s*unknown\b/, "value: unknown と書きます"),
+      TC("any を使っていない", /:\s*any\b/, "any は使わず unknown で受けます", true),
+      TC("戻り値に string の注釈", /\)\s*:\s*string\b/, "): string { と書きます"),
+    ],
+    tests: [
+      T("describeValue(42)", f => eq("describeValue(42)", f(42), "数値: 42")),
+      T(`describeValue("hi")`, f => eq(`describeValue("hi")`, f("hi"), "その他")),
+      T("describeValue(null)", f => eq("describeValue(null)", f(null), "その他")),
+    ],
+  },
+]},
+{
+  title: "第2章 関数と型",
+  resources: [
+    { label: "Handbook: More on Functions", url: "https://www.typescriptlang.org/docs/handbook/2/functions.html" },
+  ],
+  lessons: [
+  {
+    id: "repeatWord", expose: "repeatWord", title: "引数と戻り値の型",
+    desc: `<h2>2-1. 引数と戻り値の型</h2>
+<p>関数の型注釈が、TSの一番おいしいところです。<b>引数それぞれ</b>と<b>戻り値</b>に型を書くと、呼び出しミス（引数の順番違い・型違い）が全部コンパイル時に見つかります。</p>
+<pre>function add(a: number, b: number): number {
+  return a + b;
+}
+add("1", 2); // ← コンパイルエラー</pre>
+<p class="task"><b>課題:</b> 関数 <code>repeatWord(word: string, times: number): string</code> を完成させてください。<code>word</code> を <code>times</code> 回繰り返した文字列を返します（<code>word.repeat(times)</code> が使えます）。</p>`,
+    starter: `function repeatWord(word, times) {\n  // 型注釈を足して完成させる\n}\n`,
+    hint: `(word: string, times: number): string と3か所に注釈を付け、return word.repeat(times); します。`,
+    solution: `function repeatWord(word: string, times: number): string {\n  return word.repeat(times);\n}`,
+    typeChecks: [
+      TC("word に string の注釈", /word\s*:\s*string\b/, "word: string と書きます"),
+      TC("times に number の注釈", /times\s*:\s*number\b/, "times: number と書きます"),
+      TC("戻り値に string の注釈", /\)\s*:\s*string\b/, "): string { と書きます"),
+    ],
+    tests: [
+      T(`repeatWord("ラ", 3)`, f => eq(`repeatWord("ラ", 3)`, f("ラ", 3), "ラララ")),
+      T(`repeatWord("na", 2)`, f => eq(`repeatWord("na", 2)`, f("na", 2), "nana")),
+    ],
+  },
+  {
+    id: "greet", expose: "greet", title: "オプショナル引数",
+    desc: `<h2>2-2. オプショナル引数 — ?</h2>
+<p>引数名の後ろに <code>?</code> を付けると「渡しても渡さなくてもよい」引数になります。渡されなかったときの値は <code>undefined</code> なので、<code>??</code>（null合体演算子）で既定値を用意するのが定番です。</p>
+<pre>function log(message: string, prefix?: string) {
+  console.log(\`\${prefix ?? "[info]"} \${message}\`);
+}</pre>
+<p class="task"><b>課題:</b> 関数 <code>greet(name: string, honorific?: string): string</code> を作ってください。敬称 <code>honorific</code> が渡されればそれを、なければ <code>"さん"</code> を名前の後ろに付けて返します。例: <code>greet("太郎")</code> → <code>"太郎さん"</code>、<code>greet("Miku", "様")</code> → <code>"Miku様"</code>。</p>`,
+    starter: `function greet(name, honorific) {\n  // honorific は省略可能にする\n}\n`,
+    hint: `honorific?: string と ? を付け、return \`\${name}\${honorific ?? "さん"}\`; とします。`,
+    solution: `function greet(name: string, honorific?: string): string {\n  return \`\${name}\${honorific ?? "さん"}\`;\n}`,
+    typeChecks: [
+      TC("name に string の注釈", /name\s*:\s*string\b/, "name: string と書きます"),
+      TC("honorific が honorific?: string", /honorific\s*\?\s*:\s*string\b/, "honorific?: string と ? を付けます"),
+      TC("戻り値に string の注釈", /\)\s*:\s*string\b/, "): string { と書きます"),
+    ],
+    tests: [
+      T(`greet("太郎")`, f => eq(`greet("太郎")`, f("太郎"), "太郎さん")),
+      T(`greet("Miku", "様")`, f => eq(`greet("Miku", "様")`, f("Miku", "様"), "Miku様")),
+    ],
+  },
+  {
+    id: "fade", expose: "fade", title: "デフォルト引数",
+    desc: `<h2>2-3. デフォルト引数と型</h2>
+<p>JSのデフォルト引数に型注釈を組み合わせると <code>step: number = 10</code> の形になります。<code>?</code> との違い: デフォルト引数は省略時に <code>undefined</code> ではなく既定値が入るので、関数の中で場合分けが不要です。</p>
+<p class="task"><b>課題:</b> 関数 <code>fade(volume: number, step: number = 10): number</code> を作ってください。音量 <code>volume</code> から <code>step</code> を引いた値を返します。ただし0未満にはならないこと（<code>Math.max</code> が使えます）。</p>`,
+    starter: `function fade(volume, step) {\n  // step は省略時 10 にする\n}\n`,
+    hint: `step: number = 10 と書きます。中身は return Math.max(0, volume - step);`,
+    solution: `function fade(volume: number, step: number = 10): number {\n  return Math.max(0, volume - step);\n}`,
+    typeChecks: [
+      TC("volume に number の注釈", /volume\s*:\s*number\b/, "volume: number と書きます"),
+      TC("step が step: number = 10", /step\s*:\s*number\s*=\s*10\b/, "step: number = 10 と型と既定値を両方書きます"),
+    ],
+    tests: [
+      T("fade(80)", f => eq("fade(80)", f(80), 70)),
+      T("fade(80, 30)", f => eq("fade(80, 30)", f(80, 30), 50)),
+      T("fade(5) は 0 で止まる", f => eq("fade(5) は 0 で止まる", f(5), 0)),
+    ],
+  },
+  {
+    id: "logTitle", expose: "logTitle", title: "void",
+    desc: `<h2>2-4. void — 何も返さない関数</h2>
+<p>値を返さない関数（ログ出力・画面更新など、<b>やるだけ</b>の関数）の戻り値の型は <code>void</code> と書きます。「この関数の戻り値を使ってはいけない」という宣言でもあります。</p>
+<pre>function notify(message: string): void {
+  console.log(message); // return なし
+}</pre>
+<p class="task"><b>課題:</b> 関数 <code>logTitle(title: string): void</code> を作ってください。<code>♪ 曲名</code> の形式で <code>console.log</code> に出力します。何も返さないこと。</p>`,
+    starter: `function logTitle(title) {\n  // 出力するだけの関数にする\n}\n`,
+    hint: `): void { と注釈し、console.log(\`♪ \${title}\`); を呼ぶだけ。return は書きません。`,
+    solution: `function logTitle(title: string): void {\n  console.log(\`♪ \${title}\`);\n}`,
+    typeChecks: [
+      TC("title に string の注釈", /title\s*:\s*string\b/, "title: string と書きます"),
+      TC("戻り値に void の注釈", /\)\s*:\s*void\b/, "): void { と書きます"),
+    ],
+    tests: [
+      T("戻り値が undefined", f => eq("戻り値が undefined", f("Test"), undefined)),
+      T("console.log で出力している", (f, ctx) => {
+        const before = ctx.logs.length;
+        f("Blue");
+        const line = ctx.logs[ctx.logs.length - 1] ?? "";
+        return check("console.log で出力している", ctx.logs.length > before && String(line).includes("♪ Blue"), `console.log で「♪ Blue」を出力してください（実際: ${fmt(line)}）`);
+      }),
+    ],
+  },
+]},
+{
+  title: "第3章 オブジェクトと型",
+  resources: [
+    { label: "Handbook: Object Types", url: "https://www.typescriptlang.org/docs/handbook/2/objects.html" },
+  ],
+  lessons: [
+  {
+    id: "describeTrack", expose: "describeTrack", title: "interface",
+    desc: `<h2>3-1. interface — オブジェクトの形を宣言する</h2>
+<p>オブジェクトの「形」（どんなプロパティを持つか）を <code>interface</code> で名前を付けて宣言できます。以後、その名前を型注釈として使い回せます。</p>
+<pre>interface Track {
+  title: string;
+  duration: number;
+}
+function play(track: Track) { ... }</pre>
+<p class="task"><b>課題:</b> <code>title</code>（string）と <code>duration</code>（number）を持つ <code>interface Track</code> を定義し、関数 <code>describeTrack(track: Track): string</code> を作ってください。<code>曲名（245秒）</code> の形式の文字列を返します。</p>`,
+    starter: `// interface Track をここに定義\n\nfunction describeTrack(track) {\n  // ここに書く\n}\n`,
+    hint: `interface Track { title: string; duration: number; } を定義し、return \`\${track.title}（\${track.duration}秒）\`; とします。`,
+    solution: `interface Track {\n  title: string;\n  duration: number;\n}\n\nfunction describeTrack(track: Track): string {\n  return \`\${track.title}（\${track.duration}秒）\`;\n}`,
+    typeChecks: [
+      TC("interface Track を定義", /interface\s+Track\s*\{/, "interface Track { ... } を定義します"),
+      TC("title: string を持つ", /title\s*:\s*string/, "interface の中に title: string; を書きます"),
+      TC("duration: number を持つ", /duration\s*:\s*number/, "interface の中に duration: number; を書きます"),
+      TC("track に Track の注釈", /track\s*:\s*Track\b/, "引数を track: Track と注釈します"),
+    ],
+    tests: [
+      T(`describeTrack({title:"Voyage", duration:245})`, f => eq(`describeTrack({title:"Voyage", duration:245})`, f({ title: "Voyage", duration: 245 }), "Voyage（245秒）")),
+    ],
+  },
+  {
+    id: "addPoints", expose: "addPoints", title: "type エイリアス",
+    desc: `<h2>3-2. type — 型に別名を付ける</h2>
+<p><code>type</code> はあらゆる型に別名を付けられます。オブジェクトの形なら <code>interface</code> とほぼ同じ使い勝手です（使い分けは好みの範囲。迷ったらどちらでもOK）。</p>
+<pre>type Point = { x: number; y: number };
+const p: Point = { x: 1, y: 2 };</pre>
+<p class="task"><b>課題:</b> <code>type Point = { x: number; y: number }</code> を定義し、関数 <code>addPoints(a: Point, b: Point): Point</code> を作ってください。x同士・y同士を足した<b>新しい</b>Pointを返します。</p>`,
+    starter: `// type Point をここに定義\n\nfunction addPoints(a, b) {\n  // ここに書く\n}\n`,
+    hint: `type Point = { x: number; y: number }; を定義し、return { x: a.x + b.x, y: a.y + b.y }; とします。`,
+    solution: `type Point = { x: number; y: number };\n\nfunction addPoints(a: Point, b: Point): Point {\n  return { x: a.x + b.x, y: a.y + b.y };\n}`,
+    typeChecks: [
+      TC("type Point を定義", /type\s+Point\s*=/, "type Point = { ... }; を定義します"),
+      TC("x: number を持つ", /x\s*:\s*number/, "型の中に x: number を書きます"),
+      TC("y: number を持つ", /y\s*:\s*number/, "型の中に y: number を書きます"),
+      TC("引数 a, b に Point の注釈", /a\s*:\s*Point\b[\s\S]*b\s*:\s*Point\b/, "a: Point, b: Point と注釈します"),
+      TC("戻り値に Point の注釈", /\)\s*:\s*Point\b/, "): Point { と書きます"),
+    ],
+    tests: [
+      T("addPoints({x:1,y:2}, {x:3,y:4})", f => eq("addPoints({x:1,y:2}, {x:3,y:4})", f({ x: 1, y: 2 }, { x: 3, y: 4 }), { x: 4, y: 6 })),
+      T("元のオブジェクトを変更しない", f => { const a = { x: 1, y: 1 }; f(a, { x: 2, y: 2 }); return eq("元のオブジェクトを変更しない", a, { x: 1, y: 1 }); }),
+    ],
+  },
+  {
+    id: "credit", expose: "credit", title: "オプショナルプロパティ",
+    desc: `<h2>3-3. オプショナルプロパティ — ?</h2>
+<p>プロパティ名に <code>?</code> を付けると「あってもなくてもよい」プロパティになります。使う側は <code>undefined</code> の可能性を考慮する必要があり、ここでも <code>??</code> が活躍します。</p>
+<pre>interface Song {
+  title: string;
+  artist?: string;  // ないかもしれない
+}</pre>
+<p class="task"><b>課題:</b> <code>title</code>（string・必須）と <code>artist</code>（string・省略可）を持つ <code>interface Song</code> を定義し、関数 <code>credit(song: Song): string</code> を作ってください。<code>曲名 / アーティスト名</code> の形式で、artist がなければ <code>アーティスト不明</code> とします。</p>`,
+    starter: `// interface Song をここに定義\n\nfunction credit(song) {\n  // ここに書く\n}\n`,
+    hint: `artist?: string; と ? を付けます。返すのは \`\${song.title} / \${song.artist ?? "アーティスト不明"}\`。`,
+    solution: `interface Song {\n  title: string;\n  artist?: string;\n}\n\nfunction credit(song: Song): string {\n  return \`\${song.title} / \${song.artist ?? "アーティスト不明"}\`;\n}`,
+    typeChecks: [
+      TC("interface Song を定義", /interface\s+Song\s*\{/, "interface Song { ... } を定義します"),
+      TC("artist が artist?: string", /artist\s*\?\s*:\s*string/, "artist?: string; と ? を付けます"),
+      TC("song に Song の注釈", /song\s*:\s*Song\b/, "引数を song: Song と注釈します"),
+    ],
+    tests: [
+      T("artist あり", f => eq("artist あり", f({ title: "Voyage", artist: "Miku" }), "Voyage / Miku")),
+      T("artist なし", f => eq("artist なし", f({ title: "Demo" }), "Demo / アーティスト不明")),
+    ],
+  },
+  {
+    id: "renameConfig", expose: "renameConfig", title: "readonly",
+    desc: `<h2>3-4. readonly — 書き換えを禁止する</h2>
+<p>プロパティに <code>readonly</code> を付けると、作った後の書き換えがコンパイルエラーになります。「IDは後から変えない」のような約束を型で強制できます。</p>
+<pre>interface Config {
+  readonly id: number;
+  name: string;
+}
+config.id = 999; // ← コンパイルエラー</pre>
+<p>変更したいときは、<b>元を書き換えるのではなく新しいオブジェクトを作ります</b>（スプレッド構文はJSで習ったとおり）。</p>
+<p class="task"><b>課題:</b> <code>readonly id</code>（number）と <code>name</code>（string）を持つ <code>interface Config</code> を定義し、関数 <code>renameConfig(config: Config, name: string): Config</code> を作ってください。name だけ差し替えた<b>新しい</b>オブジェクトを返します（元は変更しない）。</p>`,
+    starter: `// interface Config をここに定義\n\nfunction renameConfig(config, name) {\n  // ここに書く\n}\n`,
+    hint: `readonly id: number; と書きます。差し替えは return { ...config, name }; の1行です。`,
+    solution: `interface Config {\n  readonly id: number;\n  name: string;\n}\n\nfunction renameConfig(config: Config, name: string): Config {\n  return { ...config, name };\n}`,
+    typeChecks: [
+      TC("readonly id: number を持つ", /readonly\s+id\s*:\s*number/, "readonly id: number; と書きます"),
+      TC("config に Config の注釈", /config\s*:\s*Config\b/, "引数を config: Config と注釈します"),
+      TC("戻り値に Config の注釈", /\)\s*:\s*Config\b/, "): Config { と書きます"),
+    ],
+    tests: [
+      T("name が差し替わる", f => eq("name が差し替わる", f({ id: 1, name: "old" }, "new"), { id: 1, name: "new" })),
+      T("元のオブジェクトを変更しない", f => { const c = { id: 1, name: "old" }; f(c, "new"); return eq("元のオブジェクトを変更しない", c, { id: 1, name: "old" }); }),
+    ],
+  },
+]},
+{
+  title: "第4章 合併・交差・ジェネリクス",
+  resources: [
+    { label: "Handbook: Narrowing", url: "https://www.typescriptlang.org/docs/handbook/2/narrowing.html" },
+    { label: "Handbook: Generics", url: "https://www.typescriptlang.org/docs/handbook/2/generics.html" },
+  ],
+  lessons: [
+  {
+    id: "formatId", expose: "formatId", title: "ユニオン型",
+    desc: `<h2>4-1. ユニオン型 — AまたはB</h2>
+<p><code>number | string</code> は「数値<b>または</b>文字列」という型です。ユニオン型の値には<b>両方に共通する操作しかできない</b>ので、<code>typeof</code> で絞り込んで（narrowing）から型ごとの処理をします。絞り込んだブロックの中では、TSが型を自動で確定してくれます。</p>
+<pre>function f(id: number | string) {
+  if (typeof id === "number") {
+    id.toFixed(0);    // ここでは number 扱い
+  } else {
+    id.toUpperCase(); // ここでは string 扱い
+  }
+}</pre>
+<p class="task"><b>課題:</b> 関数 <code>formatId(id: number | string): string</code> を作ってください。数値なら <code>No.7</code> の形式、文字列なら大文字にして返します。</p>`,
+    starter: `function formatId(id) {\n  // ユニオン型で受けて typeof で絞り込む\n}\n`,
+    hint: `id: number | string と注釈し、typeof id === "number" なら \`No.\${id}\`、そうでなければ id.toUpperCase() を返します。`,
+    solution: `function formatId(id: number | string): string {\n  if (typeof id === "number") {\n    return \`No.\${id}\`;\n  }\n  return id.toUpperCase();\n}`,
+    typeChecks: [
+      TC("id に number | string の注釈", /id\s*:\s*(?:number\s*\|\s*string|string\s*\|\s*number)/, "id: number | string と書きます"),
+      TC("typeof で絞り込んでいる", /typeof\s+id/, "if (typeof id === \"number\") で分岐します"),
+    ],
+    tests: [
+      T("formatId(7)", f => eq("formatId(7)", f(7), "No.7")),
+      T(`formatId("abc")`, f => eq(`formatId("abc")`, f("abc"), "ABC")),
+    ],
+  },
+  {
+    id: "introduce", expose: "introduce", title: "交差型",
+    desc: `<h2>4-2. 交差型 — AかつB</h2>
+<p><code>&amp;</code> は複数の型を<b>合体</b>させます。<code>Named &amp; Aged</code> は「name も age も<b>両方</b>持つ」型。部品の型を組み合わせて大きな型を作るのに使います。</p>
+<pre>type Named = { name: string };
+type Aged  = { age: number };
+type Person = Named & Aged; // { name: string; age: number } と同じ</pre>
+<p class="task"><b>課題:</b> <code>Named</code> と <code>Aged</code> の交差型として <code>type Person</code> を定義し、関数 <code>introduce(p: Person): string</code> を作ってください。<code>Miku（16歳）</code> の形式で返します。</p>`,
+    starter: `type Named = { name: string };\ntype Aged = { age: number };\n\n// type Person をここに定義（Named と Aged の交差型）\n\nfunction introduce(p) {\n  // ここに書く\n}\n`,
+    hint: `type Person = Named & Aged; と定義し、return \`\${p.name}（\${p.age}歳）\`; とします。`,
+    solution: `type Named = { name: string };\ntype Aged = { age: number };\n\ntype Person = Named & Aged;\n\nfunction introduce(p: Person): string {\n  return \`\${p.name}（\${p.age}歳）\`;\n}`,
+    typeChecks: [
+      TC("type Person = Named & Aged", /type\s+Person\s*=\s*(?:Named\s*&\s*Aged|Aged\s*&\s*Named)/, "type Person = Named & Aged; と書きます"),
+      TC("p に Person の注釈", /p\s*:\s*Person\b/, "引数を p: Person と注釈します"),
+    ],
+    tests: [
+      T(`introduce({name:"Miku", age:16})`, f => eq(`introduce({name:"Miku", age:16})`, f({ name: "Miku", age: 16 }), "Miku（16歳）")),
+    ],
+  },
+  {
+    id: "firstOf", expose: "firstOf", title: "ジェネリクス",
+    desc: `<h2>4-3. ジェネリクス — 型の変数 &lt;T&gt;</h2>
+<p>「number[]でもstring[]でも動く関数」を型安全に書くのがジェネリクスです。<code>&lt;T&gt;</code> は<b>型の変数</b>で、呼び出し時に実際の型が決まります。<code>firstOf([1, 2])</code> なら T = number、<code>firstOf(["a"])</code> なら T = string。</p>
+<pre>function firstOf&lt;T&gt;(items: T[]): T | undefined {
+  ...
+}</pre>
+<p class="task"><b>課題:</b> 上のシグネチャどおりに関数 <code>firstOf</code> を完成させてください。配列の先頭要素を返します（空配列なら <code>undefined</code>）。戻り値の型が <code>T | undefined</code> なのは「空かもしれない」ことを型で正直に表すためです。</p>`,
+    starter: `function firstOf(items) {\n  // <T> を使ったシグネチャに書き換える\n}\n`,
+    hint: `function firstOf<T>(items: T[]): T | undefined { return items[0]; } — 関数名の直後に <T> を書きます。`,
+    solution: `function firstOf<T>(items: T[]): T | undefined {\n  return items[0];\n}`,
+    typeChecks: [
+      TC("firstOf<T> と型パラメータを宣言", /firstOf\s*<\s*T\s*>/, "関数名の直後に <T> を書きます"),
+      TC("items に T[] の注釈", /items\s*:\s*T\s*\[\s*\]/, "items: T[] と書きます"),
+      TC("戻り値に T | undefined の注釈", /\)\s*:\s*(?:T\s*\|\s*undefined|undefined\s*\|\s*T\b)/, "): T | undefined { と書きます"),
+    ],
+    tests: [
+      T("firstOf([10, 20])", f => eq("firstOf([10, 20])", f([10, 20]), 10)),
+      T(`firstOf(["a", "b"])`, f => eq(`firstOf(["a", "b"])`, f(["a", "b"]), "a")),
+      T("firstOf([])", f => eq("firstOf([])", f([]), undefined)),
+    ],
+  },
+  {
+    id: "toArray", expose: "toArray", title: "型ガード",
+    desc: `<h2>4-4. 型ガード — Array.isArray で絞り込む</h2>
+<p>絞り込みに使えるのは <code>typeof</code> だけではありません。配列かどうかは <code>Array.isArray(value)</code> で判定でき、TSはこれも型ガードとして理解します。「単品でも配列でも受け取れて、中では配列に統一する」のは実務で頻出のパターンです。</p>
+<pre>function f(value: number | number[]) {
+  if (Array.isArray(value)) {
+    // ここでは number[] 扱い
+  } else {
+    // ここでは number 扱い
+  }
+}</pre>
+<p class="task"><b>課題:</b> 関数 <code>toArray(value: number | number[]): number[]</code> を作ってください。配列ならそのまま、単品の数値なら1要素の配列にして返します。</p>`,
+    starter: `function toArray(value) {\n  // Array.isArray で絞り込む\n}\n`,
+    hint: `value: number | number[] と注釈し、return Array.isArray(value) ? value : [value]; とします。`,
+    solution: `function toArray(value: number | number[]): number[] {\n  return Array.isArray(value) ? value : [value];\n}`,
+    typeChecks: [
+      TC("value に number | number[] の注釈", /value\s*:\s*(?:number\s*\|\s*number\s*\[\s*\]|number\s*\[\s*\]\s*\|\s*number\b)/, "value: number | number[] と書きます"),
+      TC("Array.isArray で絞り込んでいる", /Array\s*\.\s*isArray/, "Array.isArray(value) で判定します"),
+      TC("戻り値に number[] の注釈", /\)\s*:\s*number\s*\[\s*\]/, "): number[] { と書きます"),
+    ],
+    tests: [
+      T("toArray(5)", f => eq("toArray(5)", f(5), [5])),
+      T("toArray([1, 2])", f => eq("toArray([1, 2])", f([1, 2]), [1, 2])),
+    ],
+  },
+]},
+{
+  title: "第5章 実践",
+  resources: [
+    { label: "Handbook: Utility Types", url: "https://www.typescriptlang.org/docs/handbook/utility-types.html" },
+  ],
+  lessons: [
+  {
+    id: "updateSettings", expose: "updateSettings", title: "Partial",
+    desc: `<h2>5-1. Partial — 全部オプショナルにする</h2>
+<p>TSには既存の型から新しい型を作る<b>ユーティリティ型</b>が組み込まれています。<code>Partial&lt;Settings&gt;</code> は「Settings の全プロパティを省略可にした型」。「一部だけ更新する」関数の引数にぴったりです。</p>
+<pre>Partial&lt;Settings&gt;
+// = { bpm?: number; volume?: number } と同じ</pre>
+<p class="task"><b>課題:</b> 関数 <code>updateSettings(settings: Settings, patch: Partial&lt;Settings&gt;): Settings</code> を完成させてください。patch の内容で上書きした<b>新しい</b>オブジェクトを返します（元は変更しない。JSで習ったスプレッドのマージです）。</p>`,
+    starter: `interface Settings {\n  bpm: number;\n  volume: number;\n}\n\nfunction updateSettings(settings, patch) {\n  // ここに書く\n}\n`,
+    hint: `patch: Partial<Settings> と注釈します。マージは return { ...settings, ...patch }; の1行。`,
+    solution: `interface Settings {\n  bpm: number;\n  volume: number;\n}\n\nfunction updateSettings(settings: Settings, patch: Partial<Settings>): Settings {\n  return { ...settings, ...patch };\n}`,
+    typeChecks: [
+      TC("settings に Settings の注釈", /settings\s*:\s*Settings\b/, "settings: Settings と書きます"),
+      TC("patch に Partial<Settings> の注釈", /patch\s*:\s*Partial\s*<\s*Settings\s*>/, "patch: Partial<Settings> と書きます"),
+      TC("戻り値に Settings の注釈", /\)\s*:\s*Settings\b/, "): Settings { と書きます"),
+    ],
+    tests: [
+      T("bpm だけ上書き", f => eq("bpm だけ上書き", f({ bpm: 120, volume: 80 }, { bpm: 140 }), { bpm: 140, volume: 80 })),
+      T("元のオブジェクトを変更しない", f => { const s = { bpm: 120, volume: 80 }; f(s, { volume: 50 }); return eq("元のオブジェクトを変更しない", s, { bpm: 120, volume: 80 }); }),
+    ],
+  },
+  {
+    id: "summarize", expose: "summarize", title: "Pick / Omit",
+    desc: `<h2>5-2. Pick / Omit — プロパティを選ぶ・除く</h2>
+<p><code>Pick&lt;Track, "id" | "title"&gt;</code> は「Track から id と title だけを<b>選んだ</b>型」。逆に <code>Omit&lt;Track, "url"&gt;</code> は「url を<b>除いた</b>型」です。APIに返す形を絞るときなどによく使います。</p>
+<p class="task"><b>課題:</b> <code>type TrackSummary = Pick&lt;Track, "id" | "title"&gt;</code> を定義し、関数 <code>summarize(track: Track): TrackSummary</code> を作ってください。id と title <b>だけ</b>を持つ新しいオブジェクトを返します（url を含めないこと）。</p>`,
+    starter: `interface Track {\n  id: number;\n  title: string;\n  url: string;\n}\n\n// type TrackSummary をここに定義\n\nfunction summarize(track) {\n  // ここに書く\n}\n`,
+    hint: `type TrackSummary = Pick<Track, "id" | "title">; と定義し、return { id: track.id, title: track.title }; とします。`,
+    solution: `interface Track {\n  id: number;\n  title: string;\n  url: string;\n}\n\ntype TrackSummary = Pick<Track, "id" | "title">;\n\nfunction summarize(track: Track): TrackSummary {\n  return { id: track.id, title: track.title };\n}`,
+    typeChecks: [
+      TC("Pick で TrackSummary を定義", /type\s+TrackSummary\s*=\s*Pick\s*<\s*Track\s*,/, `type TrackSummary = Pick<Track, "id" | "title">; と書きます`),
+      TC("戻り値に TrackSummary の注釈", /\)\s*:\s*TrackSummary\b/, "): TrackSummary { と書きます"),
+    ],
+    tests: [
+      T("id と title だけを返す", f => eq("id と title だけを返す", f({ id: 1, title: "Voyage", url: "https://example.com/1" }), { id: 1, title: "Voyage" })),
+    ],
+  },
+  {
+    id: "countGenres", expose: "countGenres", title: "Record",
+    desc: `<h2>5-3. Record — キーと値の型を決めた辞書</h2>
+<p><code>Record&lt;string, number&gt;</code> は「キーが string、値が number のオブジェクト」。集計結果や辞書のような、キーが動的に決まるオブジェクトの型に使います。</p>
+<pre>const counts: Record&lt;string, number&gt; = { techno: 2, house: 1 };</pre>
+<p class="task"><b>課題:</b> 関数 <code>countGenres(genres: string[]): Record&lt;string, number&gt;</code> を作ってください。ジャンル名の配列を受け取り、出現回数を数えたオブジェクトを返します。例: <code>["techno", "house", "techno"]</code> → <code>{ techno: 2, house: 1 }</code>。</p>`,
+    starter: `function countGenres(genres) {\n  // ここに書く\n}\n`,
+    hint: `const counts: Record<string, number> = {}; を用意し、for...of で counts[g] = (counts[g] ?? 0) + 1; と数えます。`,
+    solution: `function countGenres(genres: string[]): Record<string, number> {\n  const counts: Record<string, number> = {};\n  for (const g of genres) {\n    counts[g] = (counts[g] ?? 0) + 1;\n  }\n  return counts;\n}`,
+    typeChecks: [
+      TC("genres に string[] の注釈", /genres\s*:\s*(?:string\s*\[\s*\]|Array\s*<\s*string\s*>)/, "genres: string[] と書きます"),
+      TC("Record<string, number> を使用", /Record\s*<\s*string\s*,\s*number\s*>/, "Record<string, number> と書きます"),
+    ],
+    tests: [
+      T(`countGenres(["techno","house","techno"])`, f => eq(`countGenres(["techno","house","techno"])`, f(["techno", "house", "techno"]), { techno: 2, house: 1 })),
+      T("countGenres([])", f => eq("countGenres([])", f([]), {})),
+    ],
+  },
+  {
+    id: "topTracks", expose: "topTracks", title: "卒業課題",
+    desc: `<h2>5-4. 卒業課題 — 型付きの実用関数</h2>
+<p>最後は総合問題です。これまでの型注釈（interface・配列型・デフォルト引数・戻り値）と、JSで身につけた非破壊操作を組み合わせます。</p>
+<p class="task"><b>課題:</b> 関数 <code>topTracks(tracks: Track[], limit: number = 3): Track[]</code> を完成させてください。再生数 <code>plays</code> の多い順に並べて上位 <code>limit</code> 件を返します。<b>元の配列を変更しないこと</b>（コピーしてからソート）。</p>`,
+    starter: `interface Track {\n  title: string;\n  plays: number;\n}\n\nfunction topTracks(tracks, limit) {\n  // ここに書く\n}\n`,
+    hint: `[...tracks] でコピー → .sort((a, b) => b.plays - a.plays) → .slice(0, limit)。注釈は tracks: Track[], limit: number = 3, 戻り値 ): Track[] です。`,
+    solution: `interface Track {\n  title: string;\n  plays: number;\n}\n\nfunction topTracks(tracks: Track[], limit: number = 3): Track[] {\n  return [...tracks].sort((a, b) => b.plays - a.plays).slice(0, limit);\n}`,
+    typeChecks: [
+      TC("tracks に Track[] の注釈", /tracks\s*:\s*(?:Track\s*\[\s*\]|Array\s*<\s*Track\s*>)/, "tracks: Track[] と書きます"),
+      TC("limit が limit: number = 3", /limit\s*:\s*number\s*=\s*3\b/, "limit: number = 3 と書きます"),
+      TC("戻り値に Track[] の注釈", /\)\s*:\s*(?:Track\s*\[\s*\]|Array\s*<\s*Track\s*>)/, "): Track[] { と書きます"),
+    ],
+    tests: [
+      T("再生数の多い順に3件", f => {
+        const list = [
+          { title: "A", plays: 10 }, { title: "B", plays: 90 },
+          { title: "C", plays: 50 }, { title: "D", plays: 70 },
+        ];
+        return eq("再生数の多い順に3件", f(list).map(t => t.title), ["B", "D", "C"]);
+      }),
+      T("limit を指定できる", f => {
+        const list = [{ title: "A", plays: 1 }, { title: "B", plays: 3 }, { title: "C", plays: 2 }];
+        return eq("limit を指定できる", f(list, 2).map(t => t.title), ["B", "C"]);
+      }),
+      T("元の配列を変更しない", f => {
+        const list = [{ title: "A", plays: 1 }, { title: "B", plays: 3 }];
+        f(list);
+        return eq("元の配列を変更しない", list.map(t => t.title), ["A", "B"]);
+      }),
+    ],
+  },
+]},
+];
+
+for (const ch of CHAPTERS) for (const l of ch.lessons) l.ch = ch;
+const ALL = CHAPTERS.flatMap(ch => ch.lessons);
+</script>
+
+<script>
+"use strict";
+
+/* ============ 状態管理（進捗＋軽いSRS） ============ */
+const STORE_KEY = "ts-trainer-v1";
+function loadState() {
+  try { return JSON.parse(localStorage.getItem(STORE_KEY)) ?? {}; }
+  catch { return {}; }
+}
+function saveState(s) {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(s)); } catch { /* file:// 等で失敗しても続行 */ }
+}
+// state = { __seq: 通算クリア数, [lessonId]: { code, done, lapses, clearedSeq } }
+let state = loadState();
+
+// 一度でも間違えた問題は、クリア後も「3問クリアするごと」に復習として再出題する
+function dueReview(l) {
+  const st = state[l.id];
+  return !!(st?.done && (st.lapses ?? 0) > 0 && (state.__seq ?? 0) - (st.clearedSeq ?? 0) >= 3);
+}
+let current = ALL.find(l => !(state[l.id]?.done)) ?? ALL.find(dueReview) ?? ALL[0];
+
+/* ============ UI ============ */
+const $nav = document.getElementById("nav");
+const $desc = document.getElementById("desc");
+const $editor = document.getElementById("editor");
+const $output = document.getElementById("output");
+const $bar = document.querySelector("#progressbar > div");
+
+function renderNav() {
+  $nav.textContent = "";
+  for (const ch of CHAPTERS) {
+    const h = document.createElement("div");
+    h.className = "chapter";
+    h.textContent = ch.title;
+    $nav.append(h);
+    for (const l of ch.lessons) {
+      const st = state[l.id];
+      const due = dueReview(l);
+      const el = document.createElement("div");
+      el.className = "lesson" + (l === current ? " active" : "") + (st?.done ? (due ? " review" : " done") : "");
+      const mark = document.createElement("span");
+      mark.className = "mark";
+      mark.textContent = st?.done ? (due ? "🔁" : "✓") : "○";
+      const label = document.createElement("span");
+      label.textContent = l.title;
+      el.append(mark, label);
+      el.addEventListener("click", () => selectLesson(l));
+      $nav.append(el);
+    }
+  }
+  const doneCount = ALL.filter(l => state[l.id]?.done).length;
+  $bar.style.width = `${Math.round(doneCount / ALL.length * 100)}%`;
+}
+
+function resBoxHTML(ch) {
+  const links = ch.resources.map(r =>
+    `<a href="${r.url}" target="_blank" rel="noopener">${r.label}</a>`).join(" ・ ");
+  return `<div class="resbox">📚 深めるなら: ${links} ・ <a href="https://www.typescriptlang.org/play" target="_blank" rel="noopener">TypeScript Playground</a><br>※このドリルの採点は簡易チェックです。厳密な型検査は Playground に貼って試せます。</div>`;
+}
+
+function selectLesson(lesson) {
+  persistCode();
+  current = lesson;
+  $desc.innerHTML = lesson.desc + resBoxHTML(lesson.ch);
+  const saved = state[lesson.id]?.code;
+  $editor.value = saved && saved.trim() ? saved : lesson.starter;
+  editorLoaded = true;
+  $output.innerHTML = `<span class="muted">型注釈を書いて「実行して採点」を押してください。</span>`;
+  renderNav();
+  $editor.focus();
+}
+
+let editorLoaded = false;
+function persistCode() {
+  if (!current || !editorLoaded) return;
+  state = { ...state, [current.id]: { ...state[current.id], code: $editor.value } };
+  saveState(state);
+}
+
+let runToken = 0;
+async function run() {
+  persistCode();
+  const token = ++runToken;
+  const lesson = current;
+  $output.innerHTML = `<span class="muted">採点中...</span>`;
+  const { error, results, logs } = await runCode(lesson, $editor.value);
+  if (token !== runToken || lesson !== current) return; // 実行中に切替/再実行された
+  $output.textContent = "";
+
+  for (const line of logs ?? []) {
+    const d = document.createElement("div");
+    d.className = "log";
+    d.textContent = "› " + line;
+    $output.append(d);
+  }
+  let allPass = !error;
+  for (const r of results ?? []) {
+    const d = document.createElement("div");
+    d.className = "test " + (r.pass ? "pass" : "fail");
+    d.textContent = (r.pass ? "✓ " : "✗ ") + r.name + (r.pass || !r.detail ? "" : ` — ${r.detail}`);
+    $output.append(d);
+    if (!r.pass) allPass = false;
+  }
+  if (error) {
+    const d = document.createElement("div");
+    d.className = "err";
+    d.textContent = "✗ " + error;
+    $output.append(d);
+  }
+
+  const st = state[lesson.id] ?? {};
+  if (!allPass) {
+    // 失敗を記録 → クリア済みの問題ならのちほど復習として再出題される
+    state = { ...state, [lesson.id]: { ...st, code: $editor.value, lapses: (st.lapses ?? 0) + 1 } };
+    saveState(state);
+    renderNav();
+    return;
+  }
+  const wasDue = dueReview(lesson);
+  const seq = (state.__seq ?? 0) + 1;
+  state = {
+    ...state, __seq: seq,
+    [lesson.id]: { ...st, code: $editor.value, done: true, clearedSeq: seq, lapses: wasDue ? 0 : (st.lapses ?? 0) },
+  };
+  saveState(state);
+  renderNav();
+
+  const review = ALL.find(l => l !== lesson && dueReview(l));
+  const next = ALL.find(l => !(state[l.id]?.done));
+  const d = document.createElement("div");
+  if (review) {
+    d.className = "review-note";
+    d.textContent = `🔁 クリア！ 以前間違えた「${review.title}」が復習に出ています（サイドバーの🔁）`;
+  } else if (next) {
+    d.className = "celebrate";
+    d.textContent = `🎉 クリア！ 次は「${next.title}」へ（サイドバーから選択）`;
+  } else {
+    d.className = "celebrate";
+    d.textContent = "🏆 全問クリア！おめでとうございます！";
+  }
+  $output.append(d);
+}
+
+function showHint() {
+  const box = document.createElement("div");
+  box.className = "hintbox";
+  box.textContent = "💡 " + current.hint;
+  $output.append(box);
+}
+
+function showSolution() {
+  const box = document.createElement("div");
+  box.className = "hintbox";
+  const label = document.createElement("div");
+  label.textContent = "📖 解答例（まず自力で5分は粘るのがおすすめ）";
+  const pre = document.createElement("pre");
+  pre.textContent = current.solution;
+  box.append(label, pre);
+  $output.append(box);
+}
+
+document.getElementById("btn-run").addEventListener("click", run);
+document.getElementById("btn-hint").addEventListener("click", showHint);
+document.getElementById("btn-solution").addEventListener("click", showSolution);
+document.getElementById("btn-reset").addEventListener("click", () => {
+  $editor.value = current.starter;
+  persistCode();
+});
+
+$editor.addEventListener("keydown", e => {
+  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); run(); }
+  if (e.key === "Tab") {
+    e.preventDefault();
+    const { selectionStart: s, selectionEnd: end, value } = $editor;
+    $editor.value = value.slice(0, s) + "  " + value.slice(end);
+    $editor.selectionStart = $editor.selectionEnd = s + 2;
+  }
+});
+$editor.addEventListener("input", () => persistCode());
+
+renderNav();
+selectLesson(current);
+</script>
+</body>
+</html>
