@@ -108,6 +108,21 @@
     padding: 10px 12px; margin-top: 10px; font-size: 13px; line-height: 1.7;
   }
   .hintbox pre { background: var(--bg); padding: 8px 10px; border-radius: 4px; font-family: var(--mono); font-size: 12.5px; margin-top: 6px; overflow-x: auto; }
+
+  /* ---- スマホ幅: サイドバーを上に積み、ページ全体をスクロールさせる ---- */
+  @media (max-width: 720px) {
+    body { display: block; height: auto; overflow: visible; }
+    #sidebar {
+      width: auto; min-width: 0; max-height: 32vh;
+      border-right: none; border-bottom: 1px solid var(--border);
+    }
+    #main { overflow: visible; }
+    #desc { max-height: none; padding: 16px; }
+    #toolbar { flex-wrap: wrap; padding: 8px 16px; }
+    #toolbar .spacer, #toolbar .kbd { display: none; }
+    #editor { min-height: 45vh; padding: 12px 16px; font-size: 16px; } /* 16px 未満だと iOS がフォーカス時にズームする */
+    #output { height: auto; padding: 12px 16px; }
+  }
 </style>
 </head>
 <body>
@@ -192,6 +207,57 @@ function skipComment(s, i) {
   i += 2;
   while (i < s.length && !(s[i] === "*" && s[i + 1] === "/")) i++;
   return Math.min(i + 2, s.length);
+}
+
+// 文字列リテラル・コメントの中身を空白で塗りつぶした「同じ長さ」の文字列を返す。
+// テンプレートの \${...} の中はコードなので残す。keepStrings=true ならコメントだけ塗る。
+// 正規表現での書き換えが文字列やコメントの中身に当たらないようにするために使う。
+function maskLiterals(s, keepStrings) {
+  const a = s.split("");
+  const n = s.length;
+  let i = 0;
+  const blank = (from, to) => { for (let k = from; k < to && k < n; k++) if (a[k] !== "\n") a[k] = " "; };
+  function code(inTemplateExpr) {
+    let depth = 0;
+    while (i < n) {
+      const c = s[i];
+      if (c === '"' || c === "'") {
+        const j = skipStringRaw(s, i);
+        if (!keepStrings) blank(i + 1, s[j - 1] === c && j - 1 > i ? j - 1 : j);
+        i = j;
+      }
+      else if (c === "`") template();
+      else if (c === "/" && (s[i + 1] === "/" || s[i + 1] === "*")) { const j = skipComment(s, i); blank(i, j); i = j; }
+      else if (c === "{") { depth++; i++; }
+      else if (c === "}") { if (inTemplateExpr && depth === 0) return; depth--; i++; }
+      else i++;
+    }
+  }
+  function template() {
+    i++;
+    while (i < n) {
+      const c = s[i];
+      if (c === "\\") { if (!keepStrings) blank(i, i + 2); i += 2; continue; }
+      if (c === "`") { i++; return; }
+      if (c === "$" && s[i + 1] === "{") { i += 2; code(true); i++; continue; }
+      if (!keepStrings) blank(i, i + 1);
+      i++;
+    }
+  }
+  code(false);
+  return a.join("");
+}
+
+// re のマッチ位置を maskLiterals 済みの文字列で探し、元の文字列の同じ範囲を置き換える。
+// rep は "" か "$1"（どちらもコード部分しか含まない）。
+function replaceInCode(s, re, rep) {
+  const mask = maskLiterals(s, false);
+  let out = "", last = 0;
+  for (const m of mask.matchAll(re)) {
+    out += s.slice(last, m.index) + (rep === "$1" ? (m[1] ?? "") : rep);
+    last = m.index + m[0].length;
+  }
+  return out + s.slice(last);
 }
 
 // `:` の直後から型表現を読み飛ばし、型の終わった位置を返す
@@ -346,15 +412,16 @@ function stripAnnotations(src) {
 
 function stripTypes(src) {
   let s = src;
+  // 以下の正規表現は文字列・コメントの中には当てない（"known as X" などを壊さないため）
   // interface ブロック（ネスト1段まで）
-  s = s.replace(/(^|[\n;])[ \t]*(export\s+)?interface\s+[\w$]+(\s+extends\s+[\w$.,<>\s]+?)?\s*\{[^{}]*(\{[^{}]*\}[^{}]*)*\}/g, "$1");
+  s = replaceInCode(s, /(^|[\n;])[ \t]*(export\s+)?interface\s+[\w$]+(\s+extends\s+[\w$.,<>\s]+?)?\s*\{[^{}]*(\{[^{}]*\}[^{}]*)*\}/g, "$1");
   // type エイリアス
-  s = s.replace(/(^|[\n;])[ \t]*(export\s+)?type\s+[\w$]+(\s*<[^<>]*>)?\s*=\s*(\{[^{}]*\}|[^;{}\n])*;?/g, "$1");
+  s = replaceInCode(s, /(^|[\n;])[ \t]*(export\s+)?type\s+[\w$]+(\s*<[^<>]*>)?\s*=\s*(\{[^{}]*\}|[^;{}\n])*;?/g, "$1");
   // as キャスト
-  s = s.replace(/\s+as\s+const\b/g, "");
-  s = s.replace(/\s+as\s+[\w$.]+(\s*<[^<>]*>)?(\s*\[\s*\])*/g, "");
+  s = replaceInCode(s, /\s+as\s+const\b/g, "");
+  s = replaceInCode(s, /\s+as\s+[\w$.]+(\s*<[^<>]*>)?(\s*\[\s*\])*/g, "");
   // function 宣言のジェネリクスパラメータ
-  s = s.replace(/\b(function\s+[\w$]+)\s*<[^<>]*>/g, "$1");
+  s = replaceInCode(s, /\b(function\s+[\w$]+)\s*<[^<>]*>/g, "$1");
   return stripAnnotations(s);
 }
 
@@ -369,8 +436,10 @@ function withTimeout(p, ms) {
 async function runCode(lesson, code) {
   const results = [];
   // 1) 型注釈のチェック（ソースに対する軽量チェック）
+  //    コメントは除いて検査する（コメントに書いただけで合格／コメント内の any で不合格、を防ぐ）
+  const noComments = maskLiterals(code, true);
   for (const tc of lesson.typeChecks ?? []) {
-    const found = tc.re.test(code);
+    const found = tc.re.test(noComments);
     const ok = tc.not ? !found : found;
     results.push(ok
       ? { pass: true, name: "[型] " + tc.name }
@@ -902,7 +971,11 @@ const ALL = CHAPTERS.flatMap(ch => ch.lessons);
 /* ============ 状態管理（進捗＋軽いSRS） ============ */
 const STORE_KEY = "ts-trainer-v1";
 function loadState() {
-  try { return JSON.parse(localStorage.getItem(STORE_KEY)) ?? {}; }
+  try {
+    const s = JSON.parse(localStorage.getItem(STORE_KEY));
+    // 壊れた値・別形式の値（配列や数値など）は捨てて初期状態から始める
+    return s && typeof s === "object" && !Array.isArray(s) ? s : {};
+  }
   catch { return {}; }
 }
 function saveState(s) {
@@ -962,7 +1035,7 @@ function selectLesson(lesson) {
   current = lesson;
   $desc.innerHTML = lesson.desc + resBoxHTML(lesson.ch);
   const saved = state[lesson.id]?.code;
-  $editor.value = saved && saved.trim() ? saved : lesson.starter;
+  $editor.value = typeof saved === "string" && saved.trim() ? saved : lesson.starter;
   editorLoaded = true;
   $output.innerHTML = `<span class="muted">型注釈を書いて「実行して採点」を押してください。</span>`;
   renderNav();
