@@ -50,6 +50,11 @@ const stripCases = [
   ["as キャスト除去", 'const n = ("5" as unknown) as number;', "n", "5"],
   ["?? と ?. は壊さない", 'function f(o?: { v?: number }): number { return o?.v ?? -1; }', "f()", -1],
   ["オブジェクト内の三項演算子", 'function f(n: number) { return { v: n > 0 ? "p" : "m" }; }', "f(1).v", "p"],
+  ["文字列内の as は壊さない", 'const s: string = "known as Miku";', "s", "known as Miku"],
+  ["テンプレート内の as は壊さない", 'const t = "x";\nconst s: string = `same as ${t}`;', "s", "same as x"],
+  ["テンプレート式の中の as は除去", 'const v: unknown = 5;\nconst s = `${(v as number) + 1}`;', "s", "6"],
+  ["文字列内の type/interface は壊さない", 'const s = "a;type X = 1;interface Y {}";', "s", "a;type X = 1;interface Y {}"],
+  ["コメント内の as でコードがずれない", 'const a: number = 1; // same as b\nconst b: number = a + 1;', "b", 2],
 ];
 for (const [name, code, expr, want] of stripCases) {
   try {
@@ -78,6 +83,17 @@ for (const l of ALL) {
   const r = await runCode(l, l.starter);
   const ok = !!r.error || (r.results ?? []).some(x => !x.pass);
   assert(`starterは不合格: ${l.id}`, ok, "starter がそのまま合格してしまいます");
+}
+
+/* ---- 4. 型チェックはコメントを見ない ---- */
+{
+  const byId = id => ALL.find(l => l.id === id);
+  const typeFails = async (id, code) => (await runCode(byId(id), code)).results.filter(x => !x.pass && x.name.startsWith("[型]"));
+  const commented = '// const title: string\n// const bpm: number\n// const isPlaying: boolean\nconst title = "Night Drive";\nconst bpm = 128;\nconst isPlaying = false;';
+  assert("型チェック: コメントに書いただけの注釈は合格にしない", (await typeFails("annotate", commented)).length === 3);
+  const anyInComment = 'function describeValue(value: unknown): string {\n  /* 型: any は使わない */\n  if (typeof value === "number") return `数値: ${value}`;\n  return "その他";\n}';
+  const ng = await typeFails("describeValue", anyInComment);
+  assert("型チェック: コメント中の any では不合格にしない", ng.length === 0, ng.map(x => x.name).join("; "));
 }
 
 /* ---- 結果 ---- */
